@@ -1,0 +1,11 @@
+pyproject.toml
+src/mesa_star_explorer/__init__.py
+src/mesa_star_explorer/comparison.py
+src/mesa_star_explorer/io.py
+src/mesa_star_explorer/plotting.py
+src/mesa_star_explorer/profiles.py
+src/mesa_star_explorer.egg-info/PKG-INFO
+src/mesa_star_explorer.egg-info/SOURCES.txt
+src/mesa_star_explorer.egg-info/dependency_links.txt
+src/mesa_star_explorer.egg-info/requires.txt
+src/mesa_star_explorer.egg-info/top_level.txt

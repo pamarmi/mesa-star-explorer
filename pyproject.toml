@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mesa_star_explorer"
+version = "0.1.0"
+description = "Interactive GUI for MESA stellar evolution analysis"
+authors = [
+    {name = "Pablo Martínez-Miravé"}
+]
+requires-python = ">=3.10"
+
+dependencies = [
+    "numpy",
+    "pandas",
+    "matplotlib",
+    "streamlit"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
