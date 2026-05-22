@@ -44,6 +44,8 @@ def load_mesa_table(filepath):
         names=columns,
         engine="python"
     )
+    for column in data.columns:
+        data[column] = pd.to_numeric(data[column], errors="coerce")
     return metadata, data
 
 def load_multiple(files):
