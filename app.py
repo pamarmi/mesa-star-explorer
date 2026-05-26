@@ -6,6 +6,45 @@ from mesa_star_explorer.plotting import (
     plot_radius_evol, plot_temperature_evol
 )
 
+dark_mode = st.sidebar.toggle("Dark mode", value=False)
+
+if dark_mode:
+    st.markdown(
+        """
+        <style>
+        .stApp {
+            background-color: #0e1117;
+            color: #ffffff;
+        }
+
+        p, span, label, div {
+            color: #ffffff !important;
+        }
+
+        .stSidebar {
+            background-color: #161b22;
+        }
+
+        .stSelectbox label,
+        .stSlider label,
+        .stCheckbox label {
+            color: #ffffff !important;
+        }
+
+        /* keep file uploader unchanged */
+        div[data-testid="stFileUploader"] {
+            background-color: initial !important;
+            color: initial !important;
+        }
+
+        div[data-testid="stFileUploader"] * {
+            color: initial !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
 st.title("MESA Star Explorer")
 st.write("Interactive visualisation tool for MESA stellar evolution outputs")
 
