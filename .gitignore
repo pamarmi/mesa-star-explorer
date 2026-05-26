@@ -1,5 +1,22 @@
+# Python
 __pycache__/
 *.pyc
+
+# Virtual environments
 .venv/
 .env/
+
+# Testing / cache
+.pytest_cache/
+
+# Streamlit
+.streamlit/
+
+# Temporary MESA files
+temp*.data
+
+# Generated figures
+*.png
+
+# OS files
 .DS_Store

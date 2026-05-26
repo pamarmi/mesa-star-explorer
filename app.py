@@ -1,292 +1,243 @@
+###############################################
+#
+# IMPORT ALL NECESSARY FUNCTIONS AND LIBRARIES
+#
+###############################################
 import streamlit as st
-from pathlib import Path
 import matplotlib.pyplot as plt
-import pandas as pd
+from pathlib import Path
 
 from mesa_star_explorer.io import load_mesa_table
 from mesa_star_explorer.plotting import (
-    plot_hr, plot_hr_age, plot_luminosity_evol,
-    plot_radius_evol, plot_temperature_evol
+    plot_hr,
+    plot_hr_age,
+    plot_luminosity,
+    plot_radius,
+    plot_temperature,
+    set_axes
 )
 
-# ---------------------------
+@st.cache_data
+def cached_load(file_bytes):
+
+    path = "temp_cache.data"
+
+    with open(path,"wb") as f:
+        f.write(file_bytes)
+
+    return load_mesa_table(path)
+
+##################
 # DARK MODE
-# ---------------------------
-dark_mode = st.sidebar.toggle("Dark mode", value=False)
+##################
+dark_mode = st.sidebar.toggle("Dark mode", False)
 
 if dark_mode:
-    st.markdown(
-        """
-        <style>
-        .stApp { background-color: #0e1117; color: #ffffff; }
-        p, span, label, div { color: #ffffff !important; }
-        .stSidebar { background-color: #161b22; }
+    st.markdown("""
+    <style>
 
-        div[data-testid="stFileUploader"],
-        div[data-testid="stFileUploader"] * {
-            background-color: initial !important;
-            color: initial !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
+    .stApp{
+        background:#0e1117;
+        color:white;
+    }
+
+    .stSidebar{
+        background:#161b22;
+    }
+
+    h1,h2,h3,p,label,span{
+        color:white !important;
+    }
+
+    /* keep uploader untouched */
+
+    div[data-testid="stFileUploader"]{
+        background:transparent !important;
+        border-color:inherit !important;
+    }
+
+    div[data-testid="stFileUploader"] *{
+        color:unset !important;
+        background:unset !important;
+    }
+
+    button[kind="secondary"]{
+        color:unset !important;
+    }
+
+    </style>
+    """, unsafe_allow_html=True)
+
+############################
+# META DATA FOR PLOTS
+############################
+
+PLOTS = {
+    "HR Diagram":{
+        "func":plot_hr,
+        "x":"log_Teff",
+        "y":"log_L",
+        "invert":True
+    },
+
+    "HR Diagram Age":{
+        "func":plot_hr_age,
+        "x":"log_Teff",
+        "y":"log_L",
+        "invert":True
+    },
+
+    "Luminosity":{
+        "func":plot_luminosity,
+        "x":"star_age",
+        "y":"log_L",
+        "invert":False
+    },
+
+    "Radius":{
+        "func":plot_radius,
+        "x":"star_age",
+        "y":"log_R",
+        "invert":False
+    },
+
+    "Temperature":{
+        "func":plot_temperature,
+        "x":"star_age",
+        "y":"log_Teff",
+        "invert":False
+    }
+}
+
+
+##################################
+#
+# MAIN HEADER AND UPLOADING
+#
+##################################
 
 st.title("MESA Star Explorer")
 st.write("Interactive visualisation tool for MESA stellar evolution outputs")
 
-# ---------------------------
-# UPLOAD
-# ---------------------------
-uploaded_files = st.file_uploader(
+uploaded = st.file_uploader(
     "Upload MESA history.data files",
     accept_multiple_files=True
 )
 
 models = {}
 
-if uploaded_files:
+if uploaded:
 
-    st.subheader("Name your models")
-
-    for i, uploaded in enumerate(uploaded_files):
-
+    for i,file in enumerate(uploaded):
         model_name = st.text_input(
-            f"Model {i+1} name",
-            value=uploaded.name.replace(".data", ""),
+            f"Model {i+1}",
+            file.name.replace(".data",""),
             key=f"name_{i}"
         )
+        meta,history = cached_load(file.getvalue())
+        models[model_name] = {"meta":meta, "history":history}
 
-        save_path = Path(f"temp_{i}.data")
-        with open(save_path, "wb") as f:
-            f.write(uploaded.getbuffer())
+    # SIDEBAR FEATURES
+    selected = st.sidebar.multiselect("Models",list(models),default=list(models)[:1]    )
 
-        meta, history = load_mesa_table(save_path)
+    choice = st.selectbox("Plot",list(PLOTS))
+    info = PLOTS[choice]
+    linewidth = st.sidebar.slider("Line width",0.5,5.0,2.0)
+    linestyle = st.sidebar.selectbox("Line style",["-","--",":","-."])
+    grid = st.sidebar.checkbox("Show grid",True)
 
-        models[model_name] = {
-            "meta": meta,
-            "history": history
-        }
+    xmin = min(models[m]["history"][info["x"]].min() for m in selected)
+    xmax = max(models[m]["history"][info["x"]].max() for m in selected)
+    ymin = min(models[m]["history"][info["y"]].min() for m in selected)
+    ymax = max(models[m]["history"][info["y"]].max() for m in selected)
 
-    # ---------------------------
-    # SIDEBAR CONTROLS
-    # ---------------------------
-    st.sidebar.title("Controls")
+    if "HR" in choice:
+        xmin = float(xmin)-2
+        xmax = float(xmax)+2
+        ymin = float(ymin)-2
+        ymax = float(ymax)+2
 
-    mode = st.sidebar.radio(
-        "Analysis mode",
-        ["Single model", "Overlay models"]
-    )
+    elif choice == "Luminosity":
+        xmin = 0.0
+        ymin = float(ymin)-2
+        ymax = float(ymax)+2
 
-    selected_models = st.sidebar.multiselect(
-        "Select models",
-        list(models.keys()),
-        default=list(models.keys())[:1]
-    )
+    elif choice == "Radius":
+        xmin = 0.0
+        ymin = float(ymin)-2
+        ymax = float(ymax)+2
 
-    # ---------------------------
-    # COLORS
-    # ---------------------------
-    colors = plt.cm.tab10.colors
-    model_colors = {
-        name: colors[i % len(colors)]
-        for i, name in enumerate(selected_models)
-    }
+    elif choice == "Temperature":
+        xmin = 0.0
+        ymin = float(ymin)-2
+        ymax = float(ymax)+2
 
-    # ---------------------------
-    # PLOT DEFINITIONS
-    # ---------------------------
-    PLOTS = {
-        "HR Diagram": ("log_Teff", "log_L"),
-        "HR Diagram with age": ("log_Teff", "log_L"),
-        "Luminosity": ("star_age", "log_L"),
-        "Radius": ("star_age", "log_R"),
-        "Temperature": ("star_age", "log_Teff")
-    }
+    xrange = st.sidebar.slider("X range",float(xmin), float(xmax),(float(xmin),float(xmax)))
+    yrange = st.sidebar.slider("Y range",float(ymin),float(ymax),(float(ymin),float(ymax)))
 
-    LABELS = {
-        "log_Teff": "log Teff",
-        "log_L": "log L",
-        "log_R": "log R",
-        "star_age": "Age (yr)"
-    }
-
-    choices = st.multiselect(
-        "Select plots",
-        list(PLOTS.keys()),
-        default=["HR Diagram"]
-    )
-
-    # ---------------------------
-    # SIDEBAR MODEL INFO
-    # ---------------------------
-    with st.sidebar.expander("Model Comparison", expanded=True):
-
-        for name in selected_models:
+    with st.sidebar.expander("Model Information",True):
+        colors = plt.cm.tab10.colors
+        for i,name in enumerate(selected):
             meta = models[name]["meta"]
             history = models[name]["history"]
-            color = model_colors[name]
+            color = colors[i]
 
-            st.markdown(
-                f"<div style='margin-top:10px; padding:6px; "
-                f"border-left:6px solid rgb{color}; "
-                f"background-color:rgba{(*color, 0.1)}'>"
-                f"<b>{name}</b></div>",
-                unsafe_allow_html=True
-            )
-
+            st.markdown(f":rainbow[{name}]")
             if "version_number" in meta:
-                st.write(f"Version: {meta['version_number']}")
+                st.write(f"MESA: {meta['version_number']}")
+
             if "compiler" in meta:
                 st.write(f"Compiler: {meta['compiler']}")
+
             if "date" in meta:
-                st.write(f"Date: {meta['date']}")
+                d = str(meta["date"])
+                if len(d)==8:
+                    d = (f"{d[:4]}-"f"{d[4:6]}-"f"{d[6:]}")
+                st.write(f"Date: {d}")
 
-            for key in ["star_mass", "mass"]:
-                if key in history.columns:
-                    st.write(f"Mass: {history[key].iloc[0]:.2f} M☉")
-                    break
+            if "star_mass" in history.columns:
+                st.write(f"Mass: " f"{float(history['star_mass'].iloc[0]):.2f} M☉")
 
-            for key in ["log_Z", "Z"]:
-                if key in history.columns:
-                    try:
-                        Z = history[key].iloc[0]
-                        Z = 10**float(Z) if "log" in key else float(Z)
-                        st.write(f"Metallicity: {Z:.3e}")
-                    except:
-                        pass
+            if "log_Z" in history.columns:
+                try:
+                    Z = (10**float(history["log_Z"].iloc[0]))
+                    st.write(f"Z: {Z:.3e}")
+                except:
+                    pass
 
-            st.markdown("---")
+            st.divider()
 
-    # ---------------------------
-    # PLOT SETTINGS (SINGLE MODE)
-    # ---------------------------
-    def plot_settings(name, xcol, ycol, history):
-        with st.sidebar.expander(f"{name} settings", expanded=False):
-            lw = st.slider(f"{name} linewidth", 0.1, 5.0, 1.5)
-            ls = st.selectbox(f"{name} style", ["-", "--", ":", "-."])
-            grid = st.checkbox(f"{name} grid", True)
+    # FIGURE
+    fig,ax = plt.subplots()
+    colors = plt.cm.tab10.colors
+    for i,name in enumerate(selected):
+        history = models[name]["history"]
+        info["func"](
+            ax,
+            history,
+            linewidth=linewidth,
+            linestyle=linestyle,
+            color=colors[i]
+        )
+    set_axes(
+        ax,
+        info["x"],
+        info["y"],
+        xr=xrange,
+        yr=yrange,
+        invert_x=info["invert"],
+        grid=grid
+    )
 
-            xmin = float(history[xcol].min())
-            xmax = float(history[xcol].max())
-            ymin = float(history[ycol].min())
-            ymax = float(history[ycol].max())
+    ax.legend(selected)
+    st.pyplot(fig)
 
-            xr = st.slider(f"{name} x-range", xmin, xmax, (xmin, xmax))
-            yr = st.slider(f"{name} y-range", ymin, ymax, (ymin, ymax))
+    with st.sidebar.expander("Export",True):
+        dpi = st.selectbox("DPI",[100,150,300,600],2)
+        fmt = st.selectbox("Format",["png","pdf","svg"])
+        transparent = st.checkbox("Transparent",False)
+    filename = f"mesa_plot.{fmt}"
+    fig.savefig(filename,dpi=dpi,transparent=transparent,bbox_inches="tight")
 
-        return lw, ls, grid, xr, yr
-
-    # ---------------------------
-    # PLOTTING
-    # ---------------------------
-    figures = []
-
-    if mode == "Single model":
-
-        model_name = selected_models[0]
-        history = models[model_name]["history"]
-
-        for choice in choices:
-            xcol, ycol = PLOTS[choice]
-
-            lw, ls, grid, xr, yr = plot_settings(choice, xcol, ycol, history)
-
-            if choice == "HR Diagram":
-                fig = plot_hr(history, lw, "#1f77b4", grid, True, ls, xr, yr)
-            elif choice == "HR Diagram with age":
-                fig = plot_hr_age(history, lw, "#1f77b4", grid, True, ls, xr, yr)
-            elif choice == "Luminosity":
-                fig = plot_luminosity_evol(history, lw, "#1f77b4", grid, ls, xr, yr)
-            elif choice == "Radius":
-                fig = plot_radius_evol(history, lw, "#1f77b4", grid, ls, xr, yr)
-            else:
-                fig = plot_temperature_evol(history, lw, "#1f77b4", grid, ls, xr, yr)
-
-            figures.append(fig)
-
-    # ---------------------------
-    # OVERLAY MODE (WITH CONTROLS)
-    # ---------------------------
-    else:
-
-        st.sidebar.subheader("Overlay settings")
-
-        lw = st.sidebar.slider("Line width", 0.5, 5.0, 2.0)
-        ls = st.sidebar.selectbox("Line style", ["-", "--", ":", "-."])
-        grid = st.sidebar.checkbox("Grid", True)
-        reverse_teff = st.sidebar.checkbox("Reverse Teff axis", True)
-        use_global_limits = st.sidebar.checkbox("Use global axis limits", True)
-
-        for choice in choices:
-
-            xcol, ycol = PLOTS[choice]
-
-            # global limits
-            if use_global_limits:
-                all_x = pd.concat([models[n]["history"][xcol] for n in selected_models])
-                all_y = pd.concat([models[n]["history"][ycol] for n in selected_models])
-
-                xr = (float(all_x.min()), float(all_x.max()))
-                yr = (float(all_y.min()), float(all_y.max()))
-            else:
-                xr, yr = None, None
-
-            fig, ax = plt.subplots()
-
-            for name in selected_models:
-                h = models[name]["history"]
-
-                ax.plot(
-                    h[xcol],
-                    h[ycol],
-                    label=name,
-                    color=model_colors[name],
-                    linewidth=lw,
-                    linestyle=ls
-                )
-
-            ax.set_xlabel(LABELS.get(xcol, xcol))
-            ax.set_ylabel(LABELS.get(ycol, ycol))
-
-            ax.legend()
-            ax.grid(grid)
-
-            if xcol == "log_Teff" and reverse_teff:
-                ax.invert_xaxis()
-
-            if xr:
-                ax.set_xlim(xr)
-            if yr:
-                ax.set_ylim(yr)
-
-            figures.append(fig)
-
-    # ---------------------------
-    # EXPORT
-    # ---------------------------
-    with st.sidebar.expander("Export", expanded=True):
-        dpi = st.selectbox("DPI", [100, 150, 300, 600], index=2)
-        fmt = st.selectbox("Format", ["png", "pdf", "svg"])
-        transparent = st.checkbox("Transparent background", False)
-        tight = st.checkbox("Tight layout", True)
-
-    for fig in figures:
-        st.pyplot(fig)
-
-    for i, fig in enumerate(figures):
-        filename = f"mesa_plot_{i}.{fmt}"
-        save_kwargs = {"dpi": dpi, "transparent": transparent}
-
-        if tight:
-            save_kwargs["bbox_inches"] = "tight"
-
-        fig.savefig(filename, **save_kwargs)
-
-        with open(filename, "rb") as f:
-            st.download_button(
-                f"Download Figure {i+1}",
-                f,
-                filename,
-                mime=f"image/{fmt}"
-            )
+    with open(filename,"rb") as f:
+        st.download_button("Download Figure",f,filename)
